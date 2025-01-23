@@ -1,5 +1,9 @@
 (require 'sly)
 
+(cl-defstruct 559am:test-package name suites)
+(cl-defstruct 559am:test-suite name tests)
+(cl-defstruct 559am:test-test name result)
+
 (defface 559am:font-test-default-face
   '((t (:foreground "gray")))
   "Face for the first word in a line.")
@@ -35,24 +39,20 @@
 	    (put-text-property (match-end 1) (line-end-position) 'face 'default))
 	  (forward-line 1))))))
 
+(require 's)
+
 (defun 559am:find-test-information-at-point ()
   "Return a pair of test suite and test name."
   (with-current-buffer (get-buffer-create 559am:buffer-name)
-    (let (a b)
-      (move-beginning-of-line nil)
-      (re-search-forward "\\([0-9\\w-_]*\\):")
-      (backward-word)
-      (setq a (thing-at-point 'symbol))
-      (re-search-forward ":\\([0-9\\w-_]*\\)")
-      (setq b (thing-at-point 'symbol))
-      (cons a b))))
+    (let* ((line (thing-at-point 'line t)))
+      (cadr (s-split " " line)))))
 
 (defun 559am:apply-result (result-data)
-  (cl-destructuring-bind ((suite-name test-name) result)
+  (cl-destructuring-bind (test-name result)
       result-data
     (with-current-buffer (get-buffer-create 559am:buffer-name)
       (beginning-of-buffer)
-      (let ((pos (re-search-forward (concat (symbol-name suite-name) ":" (symbol-name test-name)))))
+      (let ((pos (re-search-forward test-name)))
 	(move-beginning-of-line nil)
 	(kill-word 1)
 	(insert result)
@@ -61,14 +61,10 @@
 (defun 559am:execute-test-name-on-suite ()
   "Get the string of the current line and display it in the minibuffer."
   (interactive)
-  (cl-destructuring-bind (suite-name . test-name)
-      (559am:find-test-information-at-point)
-    ;; NOTE: always set in-suite before run the test
-    (let ((result (read (sly-eval `(slynk:interactive-eval
-				    ,(format "(progn (fivefivenineam:run-test '%s '%s))"
-					     suite-name test-name
-					     suite-name test-name))))))
-      (559am:apply-result result))))
+  (let ((result (read (sly-eval `(slynk:interactive-eval
+				  ,(format "(progn (fivefivenineam:run-test '%s))"
+					   (559am:find-test-information-at-point)))))))
+    (559am:apply-result (print result))))
 
 (defvar 559am:test-buffer-mode-map
   (let ((map (make-sparse-keymap)))
@@ -81,15 +77,28 @@
   :lighter " TestBuf"
   :keymap 559am:test-buffer-mode-map)
 
+(defun 559am:%load-tests ()
+    (read (sly-eval `(slynk:interactive-eval "(fivefivenineam:load-tests)"))))
+
+(defun 559am:process (data)
+  (mapcar (lambda (pkg)
+	    (cl-destructuring-bind (pkg-name &rest suite-data)
+		pkg
+	      (make-559am:test-package
+	       :name pkg-name
+	       :suites (mapcar (lambda (data)
+				 (cl-destructuring-bind (suite-name &rest tests)
+				     data
+				   (make-559am:test-suite :name suite-name :tests
+							  (mapcar (lambda (test-name)
+								    (make-559am:test-test :name test-name))
+								  (ensure-list tests)))))
+			       suite-data))))
+	  data))
+
 (defun 559am:load-tests ()
-  (setq 559am:*tests* (make-hash-table))
-  (mapcar (lambda (suite)
-	    (puthash (car suite) (cdr suite) 559am:*tests*))
-	  (read (sly-eval `(slynk:interactive-eval "(reverse
-	   (mapcar
-	    (lambda (x)
-	      (visit-test (gethash x (5am::%tests 5am::*test*))))
-	    5am::*toplevel-suites*))")))))
+  (let ((data (559am:%load-tests)))
+    (setq 559am:*tests* (559am:process data))))
 
 (defun 559am:find-all-tests ()
   "Create a new buffer with test suite names concatenated to test names.
@@ -98,10 +107,19 @@ TEST-SUITES is a list of lists where the first item is the test suite name and t
   (let ((test-suites (559am:load-tests)))
     (with-current-buffer (get-buffer-create 559am:buffer-name)
       (erase-buffer)
-      (maphash (lambda (suite-name tests)
-		 (dolist (test-name tests)
-		   (insert (format "NONE %s:%s\n" suite-name (symbol-name test-name)))))
-	       559am:*tests*)
+      (map nil (lambda (pkg)
+		 (insert (format "Package %s\n" (559am:test-package-name pkg)))
+		 (map nil (lambda (suite)
+			    (insert (format "- Suite %s\n" (559am:test-suite-name suite)))
+			    (map nil
+				 (lambda (test)
+				   test
+				   (insert (format "None %s::%s\n"
+						   (559am:test-package-name pkg)
+						   (559am:test-test-name test))))
+				 (559am:test-suite-tests suite)))
+		      (559am:test-package-suites pkg)))
+	   559am:*tests*)
       (559am:test-buffer-mode 1))))
 
 (global-set-key (kbd "C-c a t") '559am:find-all-tests)
