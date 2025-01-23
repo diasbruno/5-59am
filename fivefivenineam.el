@@ -119,7 +119,6 @@ TEST-SUITES is a list of lists where the first item is the test suite name and t
     (with-current-buffer (get-buffer-create 559am:buffer-name)
       (erase-buffer)
       (map nil (lambda (pkg)
-		 (insert (format "Package %s\n" (559am:test-package-name pkg)))
 		 (map nil (lambda (suite)
 			    (insert (format "Suite %s\n" (559am:test-suite-name suite)))
 			    (map nil
