@@ -8,6 +8,14 @@
   '((t (:foreground "gray")))
   "Face for the first word in a line.")
 
+(defface 559am:font-test-package-face
+  '((t (:foreground "yellow")))
+  "Face for the first word in a line.")
+
+(defface 559am:font-test-suite-face
+  '((t (:foreground "orange")))
+  "Face for the first word in a line.")
+
 (defface 559am:font-test-passed-face
   '((t (:foreground "green")))
   "Face for the first word in a line.")
@@ -28,14 +36,17 @@
       (while (not (eobp))
 	(let ((start (point)))
 	  (when (re-search-forward "^\\(\\w+\\)" (line-end-position) t)
-	    (let ((color (save-excursion
-			   (line-beginning-position nil)
-			   (cond
-			    ((string-equal "PASS" (thing-at-point 'symbol t)) '559am:font-test-passed-face)
-			    ((string-equal "FAIL" (thing-at-point 'symbol t)) '559am:font-test-failed-face)
-			    (t '559am:font-test-default-face)))))
+	    (let* ((word (thing-at-point 'symbol t))
+		   (color (save-excursion
+			    (line-beginning-position nil)
+			    (cond
+			     ((string-equal "Package" word) '559am:font-test-package-face)
+			     ((string-equal "Suite" word) '559am:font-test-suite-face)
+			     ((string-equal "PASS" word) '559am:font-test-passed-face)
+			     ((string-equal "FAIL" word) '559am:font-test-failed-face)
+			     (t '559am:font-test-default-face)))))
 	      (line-beginning-position nil)
-	      (put-text-property (- (match-beginning 1) 3) (match-end 1) 'face color))
+	      (put-text-property (- (match-beginning 1) (1- (length word))) (match-end 1) 'face color))
 	    (put-text-property (match-end 1) (line-end-position) 'face 'default))
 	  (forward-line 1))))))
 
@@ -52,7 +63,7 @@
       result-data
     (with-current-buffer (get-buffer-create 559am:buffer-name)
       (beginning-of-buffer)
-      (let ((pos (re-search-forward test-name)))
+      (let ((pos (re-search-forward (symbol-name test-name))))
 	(move-beginning-of-line nil)
 	(kill-word 1)
 	(insert result)
@@ -63,8 +74,8 @@
   (interactive)
   (let ((result (read (sly-eval `(slynk:interactive-eval
 				  ,(format "(progn (fivefivenineam:run-test '%s))"
-					   (559am:find-test-information-at-point)))))))
-    (559am:apply-result (print result))))
+					   (print (559am:find-test-information-at-point))))))))
+    (559am:apply-result result)))
 
 (defvar 559am:test-buffer-mode-map
   (let ((map (make-sparse-keymap)))
@@ -98,7 +109,7 @@
 
 (defun 559am:load-tests ()
   (let ((data (559am:%load-tests)))
-    (setq 559am:*tests* (559am:process data))))
+    (setq 559am:*tests* (559am:process data)) ))
 
 (defun 559am:find-all-tests ()
   "Create a new buffer with test suite names concatenated to test names.
@@ -110,7 +121,7 @@ TEST-SUITES is a list of lists where the first item is the test suite name and t
       (map nil (lambda (pkg)
 		 (insert (format "Package %s\n" (559am:test-package-name pkg)))
 		 (map nil (lambda (suite)
-			    (insert (format "- Suite %s\n" (559am:test-suite-name suite)))
+			    (insert (format "Suite %s\n" (559am:test-suite-name suite)))
 			    (map nil
 				 (lambda (test)
 				   test
@@ -120,6 +131,7 @@ TEST-SUITES is a list of lists where the first item is the test suite name and t
 				 (559am:test-suite-tests suite)))
 		      (559am:test-package-suites pkg)))
 	   559am:*tests*)
+      (559am:color-first-word)
       (559am:test-buffer-mode 1))))
 
 (global-set-key (kbd "C-c a t") '559am:find-all-tests)
