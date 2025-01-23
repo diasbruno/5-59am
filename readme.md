@@ -5,6 +5,8 @@ and run the tests loaded on your lisp session.
 
 For now, this plugin is 5am only.
 
+![image](https://github.com/diasbruno/5-59am/blob/development/assets/image.png)
+
 # License
 
 Unlicense
