@@ -61,25 +61,52 @@
 (defun 559am:apply-result (result-data)
   (cl-destructuring-bind (test-name result)
       result-data
-    (with-current-buffer (get-buffer-create 559am:buffer-name)
-      (beginning-of-buffer)
-      (let ((pos (re-search-forward (symbol-name test-name))))
-	(move-beginning-of-line nil)
-	(kill-word 1)
-	(insert result)
-	(559am:color-first-word)))))
+    (let ((b (get-buffer-create 559am:buffer-name)))
+      (with-current-buffer b
+	(beginning-of-buffer)
+	(let ((pos (re-search-forward (symbol-name test-name))))
+	  (move-beginning-of-line nil)
+	  (kill-word 1)
+	  (insert result)
+	  (559am:color-first-word))))))
 
 (defun 559am:execute-test-name-on-suite ()
   "Get the string of the current line and display it in the minibuffer."
   (interactive)
-  (let ((result (read (sly-eval `(slynk:interactive-eval
-				  ,(format "(progn (fivefivenineam:run-test '%s))"
-					   (print (559am:find-test-information-at-point))))))))
-    (559am:apply-result result)))
+  (let ((test-information (559am:find-test-information-at-point)))
+    (sly-eval-async `(slynk:interactive-eval
+		      ,(format "(fivefivenineam:run-test '%s)" test-information))
+      (lambda (result) (559am:apply-result (read result))))))
+
+(defun 559am:display-result (result)
+  (let ((b (get-buffer-create "*result-buffer*")))
+    (with-current-buffer b
+      (erase-buffer)
+      (cl-destructuring-bind (test-name result reason)
+	  result
+	(insert test-name)
+	(newline)
+	(insert "---------")
+	(newline)
+	(newline)
+	(insert reason))
+      (let ((new-window (split-window-right)))
+	;; Select the new window
+	(select-window new-window)
+	;; Display the buffer in the new window
+	(set-window-buffer new-window b)))))
+
+(defun 559am:get-test-report ()
+  (interactive)
+  (let ((test-information (559am:find-test-information-at-point)))
+    (sly-eval-async `(slynk:interactive-eval
+		      ,(format "(fivefivenineam:get-report '%s)" test-information))
+      (lambda (result) (559am:display-result (read result))))))
 
 (defvar 559am:test-buffer-mode-map
   (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "RET") '559am:execute-test-name-on-suite)
+    (define-key map (kbd "RET") '559am:get-test-report)
+    (define-key map (kbd "e") '559am:execute-test-name-on-suite)
     map)
   "Keymap for `test-buffer-mode`.")
 
