@@ -1,5 +1,6 @@
 (asdf:defsystem #:fivefivenineam
   :author "Bruno Dias"
   :serial t
-  :depends-on (#:fiveam)
+  :depends-on (#:alexandria
+               #:fiveam)
   :components ((:file "package")))
