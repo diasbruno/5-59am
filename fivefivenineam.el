@@ -47,6 +47,8 @@
 
 (defvar *fivefivenineam-debugging+ nil)
 
+(defvar *fivefivenineam-current-test* nil)
+
 (defvar *fivefivenineam-tests* (make-hash-table))
 
 (defvar +fivefivenineam-buffer-name+ "5:59am|*test-buffer*")
@@ -73,15 +75,17 @@
   (with-current-buffer (get-buffer-create +fivefivenineam-buffer-name+)
     (setq mode-line-process (list status))))
 
-(defun fivefivenineam--apply-result (result-data)
+(defun fivefivenineam--apply-result (test-id result-data)
   "Mark the result of the test using RESULT-DATA."
   (cl-destructuring-bind (test-name result)
       result-data
-    (let ((row (tabulated-list-get-entry)))
-      (tabulated-list-set-col 2 (propertize (aref row 2) 'face (if result
-                                                                   'fivefivenineam-font-test-passed-face
-                                                                 'fivefivenineam-font-test-failed-face)))
-      (remove-hook 'pre-command-hook #'fivefivenineam--block-movement-command))))
+    (save-excursion
+      (goto-char test-id)
+      (let ((row (tabulated-list-get-entry)))
+        (tabulated-list-set-col 2 (propertize (aref row 2)
+                                              'face (if result
+                                                        'fivefivenineam-font-test-passed-face
+                                                      'fivefivenineam-font-test-failed-face)))))))
 
 (defun fivefivenineam--display-result (result)
   "Display RESULT."
@@ -152,17 +156,26 @@
 (defun fivefivenineam-execute-test-name-on-suite ()
   "Get the string of the current line and display it in the minibuffer."
   (interactive)
-  (fivefivenineam--set-buffers-mode-line-process " [Running]")
-  (add-hook 'pre-command-hook #'fivefivenineam--block-movement-command)
-  (let* ((row (tabulated-list-get-entry))
-         (cmd (format "(fivefivenineam:run-test '%s)"
-                      (format "%s::%s"
-                              (substring-no-properties (aref row 0))
-                              (aref row 2)))))
-    (sly-eval-async `(slynk:interactive-eval ,cmd)
-      (lambda (result)
-        (fivefivenineam--set-buffers-mode-line-process " [Finished]")
-        (fivefivenineam--apply-result (read result))))))
+  (handler-bind
+      ((t ()
+          (setf *fivefivenineam-current-test* nil)))
+    (when (null *fivefivenineam-current-test*)
+      (with-current-buffer (get-buffer-create +fivefivenineam-buffer-name+)
+        (setf *fivefivenineam-current-test* (point))
+        (fivefivenineam--set-buffers-mode-line-process " [Running]")
+        (let* ((row (tabulated-list-get-entry))
+               (cmd (format "(fivefivenineam:run-test '%s)"
+                            (format "%s::%s"
+                                    (substring-no-properties (aref row 0))
+                                    (aref row 2)))))
+          (tabulated-list-set-col 2 (propertize (concatenate 'string "> " (aref row 2)) 'face 'default))
+          (sly-eval-async `(slynk:interactive-eval ,cmd)
+            (lambda (result)
+              (let ((test-id *fivefivenineam-current-test*))
+                (setf *fivefivenineam-current-test* nil)
+                (with-current-buffer (get-buffer-create +fivefivenineam-buffer-name+)
+                  (fivefivenineam--set-buffers-mode-line-process " [Finished]")
+                  (fivefivenineam--apply-result test-id (read result)))))))))))
 
 (defun fivefivenineam-get-test-report ()
   "Retrive the result of a selected test on the test buffer."
@@ -181,21 +194,25 @@
   (let ((data (fivefivenineam--load-tests)))
     (setq *fivefivenineam-tests*
           (fivefivenineam--process data))
+    (fivefivenineam--refresh-tests)
+    (tabulated-list-print t)
     (fivefivenineam--set-buffers-mode-line-process " [Loaded]")))
 
 (defun fivefivenineam-find-all-tests ()
   "Create a new buffer with test suite names concatenated to test names."
   (interactive)
   (fivefivenineam-switch-to-tests-buffer)
+  (fivefivenineam-mode)
   (fivefivenineam-load-tests))
 
 (defun fivefivenineam-create-tests-buffer ()
   "Switch to tests buffer."
   (interactive)
-  (switch-to-buffer +fivefivenineam-buffer-name+)
-  (fivefivenineam-mode)
-  (fivefivenineam--refresh-tests)
-  (tabulated-list-print t))
+  (with-current-buffer (get-buffer-create +fivefivenineam-buffer-name+)
+    (switch-to-buffer +fivefivenineam-buffer-name+)
+    (fivefivenineam-mode)
+    (fivefivenineam--refresh-tests)
+    (tabulated-list-print t)))
 
 (defun fivefivenineam-switch-to-tests-buffer ()
   "Switch to tests buffer."
