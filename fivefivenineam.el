@@ -45,13 +45,13 @@
   '((t (:foreground "red")))
   "Face for the first word in a line.")
 
+(defvar *fivefivenineam-debugging+ nil)
+
 (defvar *fivefivenineam-tests* (make-hash-table))
 
 (defvar +fivefivenineam-buffer-name+ "5:59am|*test-buffer*")
 
 (defvar +fivefivenineam-result-buffer-name+ "5:59am|*result-buffer*")
-
-(defvar *fivefivenineam-debugging+ nil)
 
 (defmacro fivefivenineam-unlock-read-only-buffer (buffer &rest body)
   "Unlock a read-only BUFFER to write and lock it back BODY."
@@ -67,6 +67,11 @@
                              forward-char
                              backward-char))
     (setq this-command 'ignore)))
+
+(defun fivefivenineam--set-buffers-mode-line-process (status)
+  "Write some STATUS on the mode line process."
+  (with-current-buffer (get-buffer-create +fivefivenineam-buffer-name+)
+    (setq mode-line-process (list status))))
 
 (defun fivefivenineam--apply-result (result-data)
   "Mark the result of the test using RESULT-DATA."
@@ -172,19 +177,19 @@
 
 (defun fivefivenineam-load-tests ()
   "Load all test."
+  (fivefivenineam--set-buffers-mode-line-process " [Loading]")
   (let ((data (fivefivenineam--load-tests)))
     (setq *fivefivenineam-tests*
-          (fivefivenineam--process data))))
+          (fivefivenineam--process data))
+    (fivefivenineam--set-buffers-mode-line-process " [Loaded]")))
 
 (defun fivefivenineam-find-all-tests ()
   "Create a new buffer with test suite names concatenated to test names."
   (interactive)
   (fivefivenineam-switch-to-tests-buffer)
-  (fivefivenineam--set-buffers-mode-line-process " [Running]")
-  (fivefivenineam-load-tests)
-  (fivefivenineam--set-buffers-mode-line-process " [Finished]"))
+  (fivefivenineam-load-tests))
 
-(defun fivefivenineam-switch-to-tests-buffer ()
+(defun fivefivenineam-create-tests-buffer ()
   "Switch to tests buffer."
   (interactive)
   (switch-to-buffer +fivefivenineam-buffer-name+)
@@ -192,14 +197,16 @@
   (fivefivenineam--refresh-tests)
   (tabulated-list-print t))
 
+(defun fivefivenineam-switch-to-tests-buffer ()
+  "Switch to tests buffer."
+  (interactive)
+  (switch-to-buffer
+   (get-buffer-create +fivefivenineam-buffer-name+)))
+
 (defun fivefivenineam-switch-to-result-tests-buffer ()
   "Switch to results test buffer."
   (interactive)
   (switch-to-buffer +fivefivenineam-result-buffer-name+))
-
-(defun fivefivenineam--set-buffers-mode-line-process (status)
-  (with-current-buffer (get-buffer-create +fivefivenineam-buffer-name+)
-    (setq mode-line-process (list status))))
 
 (define-derived-mode fivefivenineam-mode tabulated-list-mode "5:59am"
   "Major mode to display topics and their test results."
