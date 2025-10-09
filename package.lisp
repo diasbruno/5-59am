@@ -43,7 +43,7 @@
 
 (defun load-tests ()
   (flet ((resymbol (name)
-           (alexandria:make-keyword (symbol-name name))))
+           (intern (string-upcase (symbol-name name)))))
     (reduce (lambda (acc suite-name)
               (let* ((bundle (gethash suite-name (5am::%tests 5am::*test*)))
                      (tests (5am::tests bundle))
