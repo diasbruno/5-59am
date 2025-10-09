@@ -17,73 +17,43 @@
 
 ;;; Code:
 
+(require 'cl)
 (require 's)
 (require 'sly)
 
-(cl-defstruct 559am:test-package name suites)
-(cl-defstruct 559am:test-suite name tests)
-(cl-defstruct 559am:test-test name result)
+(cl-defstruct fivefivenineam-test-package name suites)
+(cl-defstruct fivefivenineam-test-suite name tests)
+(cl-defstruct fivefivenineam-test-test name result)
 
-(defface 559am:font-test-default-face
+(defface fivefivenineam-font-test-default-face
   '((t (:foreground "gray")))
   "Face for the first word in a line.")
 
-(defface 559am:font-test-package-face
+(defface fivefivenineam-font-test-package-face
   '((t (:foreground "yellow")))
   "Face for the first word in a line.")
 
-(defface 559am:font-test-suite-face
+(defface fivefivenineam-font-test-suite-face
   '((t (:foreground "orange")))
   "Face for the first word in a line.")
 
-(defface 559am:font-test-passed-face
+(defface fivefivenineam-font-test-passed-face
   '((t (:foreground "green")))
   "Face for the first word in a line.")
 
-(defface 559am:font-test-failed-face
+(defface fivefivenineam-font-test-failed-face
   '((t (:foreground "red")))
   "Face for the first word in a line.")
 
-(defvar 559am:*tests* (make-hash-table))
+(defvar *fivefivenineam-tests* (make-hash-table))
 
-(defvar 559am:buffer-name "5:59am *test-buffer*")
+(defvar +fivefivenineam-buffer-name+ "5:59am|*test-buffer*")
 
-(defvar 559am:result-buffer-name "5:59am *result-buffer*")
+(defvar +fivefivenineam-result-buffer-name+ "5:59am|*result-buffer*")
 
-(defvar 559am:+debugging+ nil)
+(defvar *fivefivenineam-debugging+ nil)
 
-(defvar 559am:*current-test* nil)
-
-(defun 559am:color-first-word ()
-  "Coloring the buffer."
-  (interactive)
-  (with-current-buffer (get-buffer-create 559am:buffer-name)
-    (save-excursion
-      (goto-char (point-min))
-      (while (not (eobp))
-        (let ((start (point)))
-          (when (re-search-forward "^\\(\\w+\\)" (line-end-position) t)
-            (let* ((word (thing-at-point 'symbol t))
-                   (color (save-excursion
-                            (line-beginning-position nil)
-                            (cond
-                             ((string-equal "Package" word) '559am:font-test-package-face)
-                             ((string-equal "Suite" word) '559am:font-test-suite-face)
-                             ((string-equal "PASS" word) '559am:font-test-passed-face)
-                             ((string-equal "FAIL" word) '559am:font-test-failed-face)
-                             (t '559am:font-test-default-face)))))
-              (line-beginning-position nil)
-              (put-text-property (- (match-beginning 1) (1- (length word))) (match-end 1) 'face color))
-            (put-text-property (match-end 1) (line-end-position) 'face 'default))
-          (forward-line 1))))))
-
-(defun 559am:find-test-information-at-point ()
-  "Return a pair of test suite and test name."
-  (with-current-buffer (get-buffer-create 559am:buffer-name)
-    (let ((line (thing-at-point 'line t)))
-      (second (s-split " " line)))))
-
-(defmacro 559am:unlock-read-only-buffer (buffer &rest body)
+(defmacro fivefivenineam-unlock-read-only-buffer (buffer &rest body)
   "Unlock a read-only BUFFER to write and lock it back BODY."
   `(progn
      (with-current-buffer ,buffer
@@ -91,38 +61,26 @@
        ,@body
        (read-only-mode 1))))
 
-(defun block-movement-command ()
+(defun fivefivenineam--block-movement-command ()
   (when (memq this-command '(next-line
                              previous-line
                              forward-char
                              backward-char))
-    (message "Movement blocked!")
     (setq this-command 'ignore)))
 
-(defun 559am:apply-result (result-data)
+(defun fivefivenineam--apply-result (result-data)
   "Mark the result of the test using RESULT-DATA."
   (cl-destructuring-bind (test-name result)
       result-data
     (let ((row (tabulated-list-get-entry)))
-      (tabulated-list-set-col 2 (propertize (aref row 2) 'face (if result 'success 'error)))
-      (remove-hook 'pre-command-hook #'block-movement-command))))
+      (tabulated-list-set-col 2 (propertize (aref row 2) 'face (if result
+                                                                   'fivefivenineam-font-test-passed-face
+                                                                 'fivefivenineam-font-test-failed-face)))
+      (remove-hook 'pre-command-hook #'fivefivenineam--block-movement-command))))
 
-(defun 559am:execute-test-name-on-suite ()
-  "Get the string of the current line and display it in the minibuffer."
-  (interactive)
-  (add-hook 'pre-command-hook #'block-movement-command)
-  (setf 559am:*current-test* (tabulated-list-get-id))
-  (let* ((row (tabulated-list-get-entry))
-         (cmd (format "(fivefivenineam:run-test '%s)"
-                      (format "%s::%s"
-                              (substring-no-properties (aref row 0))
-                              (aref row 2)))))
-    (sly-eval-async `(slynk:interactive-eval ,cmd)
-      (lambda (result) (559am:apply-result (read result))))))
-
-(defun 559am:display-result (result)
+(defun fivefivenineam--display-result (result)
   "Display RESULT."
-  (let ((b (get-buffer-create 559am:result-buffer-name)))
+  (let ((b (get-buffer-create +fivefivenineam-result-buffer-name+)))
     (with-current-buffer b
       (erase-buffer)
       (cl-destructuring-bind (test-name result reason)
@@ -139,106 +97,129 @@
         ;; Display the buffer in the new window
         (set-window-buffer new-window b)))))
 
-(defun 559am:get-test-report ()
+(defun fivefivenineam--process (data)
+  "Process the given DATA of a Lisp repl."
+  (mapcar (lambda (pkg)
+            (cl-destructuring-bind (pkg-name &rest suite-data)
+                pkg
+              (make-fivefivenineam-test-package
+               :name pkg-name
+               :suites (mapcar (lambda (data)
+                                 (cl-destructuring-bind (suite-name &rest tests)
+                                     data
+                                   (make-fivefivenineam-test-suite
+                                    :name suite-name
+                                    :tests
+                                    (mapcar (lambda (test-name)
+                                              (make-fivefivenineam-test-test :name test-name))
+                                            (ensure-list tests)))))
+                               suite-data))))
+          data))
+
+(defun fivefivenineam--load-tests ()
+  "Execute the (load-tests) command on the REPL."
+  (read (sly-eval `(slynk:interactive-eval "(fivefivenineam:load-tests)"))))
+
+(defun fivefivenineam--refresh-tests ()
+  "Refresh `tabulated-list-entries` from `my-topic-list`."
+  (cl-labels ((create-row (pkg suite test)
+                (let ((pkg-name (fivefivenineam-test-package-name pkg))
+                      (suite-name (fivefivenineam-test-suite-name suite))
+                      (test-name (fivefivenineam-test-test-name test))
+                      (test-result (fivefivenineam-test-test-result test)))
+                  (list (format "%s-%s-%s"
+                                (symbol-name pkg-name)
+                                (symbol-name suite-name)
+                                (symbol-name test-name))
+                        (vector (propertize (symbol-name pkg-name) 'face 'fivefivenineam-font-test-default-face)
+                                (symbol-name suite-name)
+                                (symbol-name test-name))))))
+    (setq tabulated-list-entries
+          (cl-loop for pkg in *fivefivenineam-tests*
+                   nconc (reduce (lambda (acc suite)
+                                   (reduce (lambda (acc test)
+                                             (push (create-row pkg suite test) acc))
+                                           (fivefivenineam-test-suite-tests suite)
+                                           :initial-value acc))
+                                 (fivefivenineam-test-package-suites pkg)
+                                 :initial-value nil)))))
+
+(defun fivefivenineam-execute-test-name-on-suite ()
+  "Get the string of the current line and display it in the minibuffer."
+  (interactive)
+  (fivefivenineam--set-buffers-mode-line-process " [Running]")
+  (add-hook 'pre-command-hook #'fivefivenineam--block-movement-command)
+  (let* ((row (tabulated-list-get-entry))
+         (cmd (format "(fivefivenineam:run-test '%s)"
+                      (format "%s::%s"
+                              (substring-no-properties (aref row 0))
+                              (aref row 2)))))
+    (sly-eval-async `(slynk:interactive-eval ,cmd)
+      (lambda (result)
+        (fivefivenineam--set-buffers-mode-line-process " [Finished]")
+        (fivefivenineam--apply-result (read result))))))
+
+(defun fivefivenineam-get-test-report ()
   "Retrive the result of a selected test on the test buffer."
   (interactive)
   (let ((test-information
          (format "(fivefivenineam:get-report '%s)"
                  (559am:find-test-information-at-point))))
     (when 559am:+debugging+
-     (message "[5:59am] trying to run %s" test-information))
+      (message "[5:59am] trying to run %s" test-information))
     (sly-eval-async `(slynk:interactive-eval ,test-information)
-      (lambda (result) (559am:display-result (read result))))))
+      (lambda (result) (fivefivenineam--display-result (read result))))))
 
-(defun 559am:%load-tests ()
-  "Execute the (load-tests) command on the REPL."
-  (read (sly-eval `(slynk:interactive-eval "(fivefivenineam:load-tests)"))))
-
-(defun 559am:process (data)
-  "Process the given DATA of a Lisp repl."
-  (mapcar (lambda (pkg)
-            (cl-destructuring-bind (pkg-name &rest suite-data)
-                pkg
-              (make-559am:test-package
-               :name pkg-name
-               :suites (mapcar (lambda (data)
-                                 (cl-destructuring-bind (suite-name &rest tests)
-                                     data
-                                   (make-559am:test-suite :name suite-name :tests
-                                                          (mapcar (lambda (test-name)
-                                                                    (make-559am:test-test :name test-name))
-                                                                  (ensure-list tests)))))
-                               suite-data))))
-          data))
-
-(defun 559am:load-tests ()
+(defun fivefivenineam-load-tests ()
   "Load all test."
-  (let ((data (559am:%load-tests)))
-    (setq 559am:*tests* (559am:process data)) ))
+  (let ((data (fivefivenineam--load-tests)))
+    (setq *fivefivenineam-tests*
+          (fivefivenineam--process data))))
 
-(defun 559am:switch-to-tests-buffer ()
-  ""
+(defun fivefivenineam-find-all-tests ()
+  "Create a new buffer with test suite names concatenated to test names."
   (interactive)
-  (switch-to-buffer 559am:buffer-name)
-  (559am-mode)
-  (559am:tests--refresh)
+  (fivefivenineam-switch-to-tests-buffer)
+  (fivefivenineam--set-buffers-mode-line-process " [Running]")
+  (fivefivenineam-load-tests)
+  (fivefivenineam--set-buffers-mode-line-process " [Finished]"))
+
+(defun fivefivenineam-switch-to-tests-buffer ()
+  "Switch to tests buffer."
+  (interactive)
+  (switch-to-buffer +fivefivenineam-buffer-name+)
+  (fivefivenineam-mode)
+  (fivefivenineam--refresh-tests)
   (tabulated-list-print t))
 
-(defun 559am:switch-to-result-tests-buffer ()
+(defun fivefivenineam-switch-to-result-tests-buffer ()
+  "Switch to results test buffer."
   (interactive)
-  (switch-to-buffer 559am:result-buffer-name))
+  (switch-to-buffer +fivefivenineam-result-buffer-name+))
 
-(defun 559am:find-all-tests ()
-  "Create a new buffer with test suite names concatenated to test names.
- TEST-SUITES is a list of lists where the first item is the test suite name
- and the rest are test names."
-  (interactive)
-  (559am:load-tests))
+(defun fivefivenineam--set-buffers-mode-line-process (status)
+  (with-current-buffer (get-buffer-create +fivefivenineam-buffer-name+)
+    (setq mode-line-process (list status))))
 
-(define-derived-mode 559am-mode tabulated-list-mode "5:59am"
+(define-derived-mode fivefivenineam-mode tabulated-list-mode "5:59am"
   "Major mode to display topics and their test results."
-  :mode-name 559am-mode-map
+  :mode-name fivefivenineam-mode-map
   (setq tabulated-list-format [("Suite" 20 t)
                                ("Result" 10 t)
                                ("Title" 40 t)])
   (setq tabulated-list-padding 2)
   (setq tabulated-list-sort-key (cons "Suite" nil))
-  (add-hook 'tabulated-list-revert-hook #'559am:tests--refresh nil t)
+  (add-hook 'tabulated-list-revert-hook #'fivefivenineam--refresh-tests nil t)
   (tabulated-list-init-header))
 
-(defun 559am:tests--refresh ()
-  "Refresh `tabulated-list-entries` from `my-topic-list`."
-  (559am:find-all-tests)
-  (labels ((create-row (pkg suite test)
-                       (let ((pkg-name (559am:test-package-name pkg))
-                             (suite-name (559am:test-suite-name suite))
-                             (test-name (559am:test-test-name test))
-                             (test-result (559am:test-test-result test)))
-                         (list (format "%s-%s-%s"
-                                       (symbol-name pkg-name)
-                                       (symbol-name suite-name)
-                                       (symbol-name test-name))
-                               (vector (propertize (symbol-name pkg-name) 'face 'org-table)
-                                       (symbol-name suite-name)
-                                       (symbol-name test-name))))))
-    (setq tabulated-list-entries
-          (cl-loop for pkg in 559am:*tests*
-                   nconc (reduce (lambda (acc suite)
-                                   (reduce (lambda (acc test)
-                                             (push (create-row pkg suite test) acc))
-                                           (559am:test-suite-tests suite)
-                                           :initial-value acc))
-                                 (559am:test-package-suites pkg)
-                                 :initial-value nil)))))
+(define-key fivefivenineam-mode-map (kbd "RET") 'fivefivenineam-get-test-report)
+(define-key fivefivenineam-mode-map (kbd "e") 'fivefivenineam-execute-test-name-on-suite)
+(define-key fivefivenineam-mode-map (kbd "n") 'next-line)
+(define-key fivefivenineam-mode-map (kbd "p") 'previous-line)
+(define-key fivefivenineam-mode-map (kbd "g") 'fivefivenineam-find-all-tests)
 
-(define-key 559am-mode-map (kbd "RET") '559am:get-test-report)
-(define-key 559am-mode-map (kbd "e") '559am:execute-test-name-on-suite)
-(define-key 559am-mode-map (kbd "n") 'next-line)
-(define-key 559am-mode-map (kbd "p") 'previous-line)
-(define-key 559am-mode-map (kbd "g") '559am:find-all-tests)
+(global-set-key (kbd "C-c a t") 'fivefivenineam-find-all-tests)
+(global-set-key (kbd "C-c a b") 'fivefivenineam-switch-to-tests-buffer)
 
-(global-set-key (kbd "C-c a t") '559am:find-all-tests)
-(global-set-key (kbd "C-c a b") '559am:switch-to-tests-buffer)
-
-(provide '559am)
+(provide 'fivefivenineam)
 ;;; fivefivenineam.el ends here
