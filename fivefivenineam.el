@@ -157,6 +157,11 @@
                                  (fivefivenineam-test-package-suites pkg)
                                  :initial-value nil)))))
 
+(defun fivefivenineam-reset-state ()
+  "Reset the state when something odd happen."
+  (interactive)
+  (setf *fivefivenineam-current-test* nil))
+
 (defun fivefivenineam-execute-test-name-on-suite ()
   "Get the string of the current line and display it in the minibuffer."
   (interactive)
@@ -245,6 +250,7 @@
 (define-key fivefivenineam-mode-map (kbd "n") 'next-line)
 (define-key fivefivenineam-mode-map (kbd "p") 'previous-line)
 (define-key fivefivenineam-mode-map (kbd "g") 'fivefivenineam-find-all-tests)
+(define-key fivefivenineam-mode-map (kbd "r") 'fivefivenineam-reset-state)
 
 (global-set-key (kbd "C-c a t") 'fivefivenineam-find-all-tests)
 (global-set-key (kbd "C-c a b") 'fivefivenineam-switch-to-tests-buffer)
