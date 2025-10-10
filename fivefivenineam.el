@@ -164,15 +164,15 @@
                                  (fivefivenineam-test-package-suites pkg)
                                  :initial-value nil)))))
 
-(defun fivefivenineam-reset-state ()
-  "Reset the state when something odd happen."
-  (interactive)
-  (setf *fivefivenineam-current-test* nil))
-
 (defun fivefivenineam--get-test-from-tabulated-entry (entry)
   (format "%s::%s"
           (substring-no-properties (aref entry 0))
           (aref entry 3)))
+
+(defun fivefivenineam-reset-state ()
+  "Reset the state when something odd happen."
+  (interactive)
+  (setf *fivefivenineam-current-test* nil))
 
 (defun fivefivenineam-execute-test-name-on-suite ()
   "Get the string of the current line and display it in the minibuffer."
