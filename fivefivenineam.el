@@ -90,6 +90,10 @@
               (list "P" 'fivefivenineam-font-test-passed-face))
           (tabulated-list-set-col 2 (propertize text 'face face)))))))
 
+(defun fivefivenineam--buffer-is-visible (buffer)
+  "Check if BUFFER is visible."
+  (get-buffer-window buffer t))
+
 (defun fivefivenineam--display-result (result)
   "Display RESULT."
   (let ((b (get-buffer-create +fivefivenineam-result-buffer-name+)))
@@ -103,11 +107,12 @@
         (newline)
         (newline)
         (insert reason))
-      (let ((new-window (split-window-right)))
-        ;; Select the new window
-        (select-window new-window)
-        ;; Display the buffer in the new window
-        (set-window-buffer new-window b)))))
+      (when (not (fivefivenineam--buffer-is-visible +fivefivenineam-result-buffer-name+))
+        (let ((new-window (split-window-right)))
+          ;; Select the new window
+          (select-window new-window)
+          ;; Display the buffer in the new window
+          (set-window-buffer new-window b))))))
 
 (defun fivefivenineam--process (data)
   "Process the given DATA of a Lisp repl."
@@ -231,13 +236,21 @@
 (defun fivefivenineam-switch-to-tests-buffer ()
   "Switch to tests buffer."
   (interactive)
-  (switch-to-buffer
-   (get-buffer-create +fivefivenineam-buffer-name+)))
+  (if (not (fivefivenineam--buffer-is-visible +fivefivenineam-buffer-name+))
+      (switch-to-buffer
+       (get-buffer-create +fivefivenineam-buffer-name+))
+    (let ((win (get-buffer-window +fivefivenineam-buffer-name+ t)))
+      (when win
+        (select-window win)))))
 
 (defun fivefivenineam-switch-to-result-tests-buffer ()
   "Switch to results test buffer."
   (interactive)
-  (switch-to-buffer +fivefivenineam-result-buffer-name+))
+  (if (not (fivefivenineam--buffer-is-visible +fivefivenineam-result-buffer-name+))
+      (switch-to-buffer +fivefivenineam-result-buffer-name+)
+    (let ((win (get-buffer-window +fivefivenineam-buffer-name+ t)))
+      (when win
+        (select-window win)))))
 
 (define-derived-mode fivefivenineam-mode tabulated-list-mode "5:59am"
   "Major mode to display topics and their test results."
