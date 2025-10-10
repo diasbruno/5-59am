@@ -84,10 +84,11 @@
     (save-excursion
       (goto-char test-id)
       (let ((row (tabulated-list-get-entry)))
-        (tabulated-list-set-col 2 (propertize (aref row 2)
-                                              'face (if result
-                                                        'fivefivenineam-font-test-passed-face
-                                                      'fivefivenineam-font-test-failed-face)))))))
+        (cl-destructuring-bind (text face)
+            (if (string-equal result "FAIL")
+                (list "F" 'fivefivenineam-font-test-failed-face)
+              (list "P" 'fivefivenineam-font-test-passed-face))
+          (tabulated-list-set-col 2 (propertize text 'face face)))))))
 
 (defun fivefivenineam--display-result (result)
   "Display RESULT."
@@ -145,6 +146,7 @@
                                 (symbol-name test-name))
                         (vector (propertize (symbol-name pkg-name) 'face 'fivefivenineam-font-test-default-face)
                                 (symbol-name suite-name)
+                                (propertize "N" 'face 'fivefivenineam-font-test-default-face)
                                 (symbol-name test-name))))))
     (setq tabulated-list-entries
           (cl-loop for pkg in *fivefivenineam-tests*
@@ -162,6 +164,11 @@
   (interactive)
   (setf *fivefivenineam-current-test* nil))
 
+(defun fivefivenineam--get-test-from-tabulated-entry (entry)
+  (format "%s::%s"
+          (substring-no-properties (aref entry 0))
+          (aref entry 3)))
+
 (defun fivefivenineam-execute-test-name-on-suite ()
   "Get the string of the current line and display it in the minibuffer."
   (interactive)
@@ -174,10 +181,8 @@
         (fivefivenineam--set-buffers-mode-line-process " [Running]")
         (let* ((row (tabulated-list-get-entry))
                (cmd (format "(fivefivenineam:run-test '%s)"
-                            (format "%s::%s"
-                                    (substring-no-properties (aref row 0))
-                                    (aref row 2)))))
-          (tabulated-list-set-col 2 (propertize (concatenate 'string "> " (aref row 2)) 'face 'default))
+                            (fivefivenineam--get-test-from-tabulated-entry row))))
+          (tabulated-list-set-col 2 (propertize ">" 'face 'default))
           (sly-eval-async `(slynk:interactive-eval ,cmd)
             (lambda (result)
               (let ((test-id *fivefivenineam-current-test*))
@@ -191,7 +196,7 @@
   (interactive)
   (let ((test-information
          (format "(fivefivenineam:get-report '%s)"
-                 (559am:find-test-information-at-point))))
+                 (fivefivenineam--get-test-from-tabulated-entry (tabulated-list-get-entry)))))
     (when 559am:+debugging+
       (message "[5:59am] trying to run %s" test-information))
     (sly-eval-async `(slynk:interactive-eval ,test-information)
@@ -237,9 +242,10 @@
 (define-derived-mode fivefivenineam-mode tabulated-list-mode "5:59am"
   "Major mode to display topics and their test results."
   :mode-name fivefivenineam-mode-map
-  (setq tabulated-list-format [("Suite" 20 t)
-                               ("Result" 10 t)
-                               ("Title" 40 t)])
+  (setq tabulated-list-format [("Package" 10)
+                               ("Suite" 30)
+                               ("Status" 2)
+                               ("Title" 40)])
   (setq tabulated-list-padding 2)
   (setq tabulated-list-sort-key (cons "Suite" nil))
   (add-hook 'tabulated-list-revert-hook #'fivefivenineam--refresh-tests nil t)
