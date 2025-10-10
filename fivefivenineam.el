@@ -49,6 +49,8 @@
 
 (defvar *fivefivenineam-current-test* nil)
 
+(defvar *fivefivenineam-tests-count* 0)
+
 (defvar *fivefivenineam-tests* (make-hash-table))
 
 (defvar +fivefivenineam-buffer-name+ "5:59am|*test-buffer*")
@@ -131,6 +133,7 @@
 
 (defun fivefivenineam--refresh-tests ()
   "Refresh `tabulated-list-entries` from `my-topic-list`."
+  (setf *fivefivenineam-tests-count* 0)
   (cl-labels ((create-row (pkg suite test)
                 (let ((pkg-name (fivefivenineam-test-package-name pkg))
                       (suite-name (fivefivenineam-test-suite-name suite))
@@ -147,6 +150,7 @@
           (cl-loop for pkg in *fivefivenineam-tests*
                    nconc (reduce (lambda (acc suite)
                                    (reduce (lambda (acc test)
+                                             (cl-incf *fivefivenineam-tests-count*)
                                              (push (create-row pkg suite test) acc))
                                            (fivefivenineam-test-suite-tests suite)
                                            :initial-value acc))
@@ -196,7 +200,7 @@
           (fivefivenineam--process data))
     (fivefivenineam--refresh-tests)
     (tabulated-list-print t)
-    (fivefivenineam--set-buffers-mode-line-process " [Loaded]")))
+    (fivefivenineam--set-buffers-mode-line-process (format " [Loaded %d]" *fivefivenineam-tests-count*))))
 
 (defun fivefivenineam-find-all-tests ()
   "Create a new buffer with test suite names concatenated to test names."
